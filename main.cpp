@@ -20,9 +20,96 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <math.h>
 
 using namespace cv;
 using namespace std;
+
+Mat color_image;
+
+class Point3D
+{
+private:
+    /* data */
+public:
+    Point3D(float, float, float);
+    ~Point3D();
+    float x,y,z;
+    float get_distance(Point3D p);
+};
+
+Point3D::Point3D(float a, float b, float c)
+{
+    x = a;
+    y = b;
+    z = c;
+}
+
+Point3D::~Point3D()
+{
+}
+
+float Point3D::get_distance(Point3D p){
+    return sqrt((x - p.x)*(x - p.x) + (y - p.y)*(y - p.y) + (z - p.z)*(z - p.z));
+}
+
+class ClickData
+{
+private:
+    /* data */
+public:
+    ClickData(/* args */);
+    ~ClickData();
+    int n_clicks;
+    float x1, y1;
+    float x,y;
+};
+
+ClickData::ClickData(/* args */)
+{
+    this->n_clicks = 0;
+}
+
+ClickData::~ClickData()
+{
+}
+
+
+void CallBackFunc(int event, int x, int y, int flags, void* userdataptr)
+{
+    ClickData* data = (ClickData*) userdataptr;
+    if  ( event == EVENT_LBUTTONDOWN )
+    {
+        cout << "Left button of the mouse is clicked - position (" << x << ", " << y << ")" << endl;
+        // cout << "Surprisingly, current data->n_clicks is: " << data->n_clicks << endl;
+        if (data->n_clicks == 0){
+            data->x1 = x;
+            data->y1 = y;
+        }
+        data->n_clicks++;
+    }
+
+    if (data->n_clicks > 0){
+        data->x = x;
+        data->y = y;
+    }
+    //  else if  ( event == EVENT_RBUTTONDOWN )
+    //  {
+    //       cout << "Right button of the mouse is clicked - position (" << x << ", " << y << ")" << endl;
+    //  }
+    //  else if  ( event == EVENT_MBUTTONDOWN )
+    //  {
+    //       cout << "Middle button of the mouse is clicked - position (" << x << ", " << y << ")" << endl;
+    //  }
+    //  else if ( event == EVENT_MOUSEMOVE )
+    //  {
+    //       cout << "Mouse move over the window - position (" << x << ", " << y << ")" << endl;
+
+    //  }
+
+}
+
+
 
 int average_window_filter(const Mat trans_depth_image, int i, int j, int height, int width)
 {
@@ -63,12 +150,12 @@ int average_window_filter(const Mat trans_depth_image, int i, int j, int height,
     return depth;
 }
 
-static void convert_2d_depth_to_3d_point_cloud(const k4a_calibration_t* calibration, const Mat trans_depth_image, float coordinate_x, float coordinate_y)
+static Point3D convert_2d_depth_to_3d_point_cloud(const k4a_calibration_t* calibration, const Mat trans_depth_image, float coordinate_x, float coordinate_y)
 {
     int width = calibration->color_camera_calibration.resolution_width;
-    printf("width = %d", width);
+    printf("width = %d ", width);
     int height = calibration->color_camera_calibration.resolution_height;
-    printf("height = %d", height);
+    printf("height = %d ", height);
 
     int valid;
     float depth;
@@ -85,6 +172,7 @@ static void convert_2d_depth_to_3d_point_cloud(const k4a_calibration_t* calibrat
     if (K4A_RESULT_SUCCEEDED == k4a_calibration_2d_to_3d(calibration, &point_2d, depth, K4A_CALIBRATION_TYPE_COLOR, K4A_CALIBRATION_TYPE_COLOR, &ray, &valid))
     {
         cout << "x = " << ray.xyz.x << " | y = " << ray.xyz.y << " | z = " << ray.xyz.z << " | depth = " << depth << " | valid = " << valid << endl;
+        return Point3D(ray.xyz.x, ray.xyz.y, ray.xyz.z);
     }
     else 
     {
@@ -124,7 +212,7 @@ int main()
     // Set the configuration of device, you can also set it after open the device but before starting the camera
     k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
     config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;  // <==== For Color image
-    config.color_resolution = K4A_COLOR_RESOLUTION_2160P;
+    config.color_resolution = K4A_COLOR_RESOLUTION_1080P; //K4A_COLOR_RESOLUTION_2160P;
     config.depth_mode = K4A_DEPTH_MODE_NFOV_UNBINNED;  // <==== For Depth image
     config.camera_fps = K4A_FRAMES_PER_SECOND_30;
     config.synchronized_images_only = true;
@@ -181,12 +269,12 @@ int main()
 
             // Store the image using opencv Mat
             uint8_t* color_image_data = k4a_image_get_buffer(image_color);
-            const Mat color_image(height, width, CV_8UC4, (void*)color_image_data, Mat::AUTO_STEP);
+            color_image = Mat(height, width, CV_8UC4, (void*)color_image_data, Mat::AUTO_STEP);
 
             // Display the images
-            namedWindow("foobar", WINDOW_AUTOSIZE);
-            imshow("foobar", color_image);
-            waitKey(1000);
+            // namedWindow("foobar", WINDOW_AUTOSIZE);
+            // imshow("foobar", color_image);
+            // waitKey(1000);
         }
         else
         {
@@ -208,9 +296,9 @@ int main()
             const Mat depth_image(height, width, CV_16U, (void*)depth_image_data, Mat::AUTO_STEP);
 
             // Display the images
-            namedWindow("foobar", WINDOW_AUTOSIZE);
-            imshow("foobar", depth_image);
-            waitKey(1000);
+            // namedWindow("foobar", WINDOW_AUTOSIZE);
+            // imshow("foobar", depth_image);
+            // waitKey(2000);
         }
         else
         {
@@ -246,16 +334,40 @@ int main()
             // Display the transformed depth images
             namedWindow("foobar", WINDOW_AUTOSIZE);
             imshow("foobar", trans_depth_image);
-            waitKey(1000);
+            waitKey(2000);
 
             // Find the point xy coordinate from color image, this pair of points belongs to the short edge of the shelf
-            float point1_row = (height / 2) * 3.7 / 8.9;
-            float point1_column = (width / 2) * 6.3 / 15.95;
-            convert_2d_depth_to_3d_point_cloud(&calibration, trans_depth_image, point1_row, point1_column);
+            // float point1_row = (height / 2) * 3.7 / 8.9;
+            // float point1_column = (width / 2) * 6.3 / 15.95;
+            // convert_2d_depth_to_3d_point_cloud(&calibration, trans_depth_image, point1_row, point1_column);
 
-            float point2_row = (height / 2) * 3.8 / 8.9;
-            float point2_column = (width / 2) * 8.6 / 15.95;
-            convert_2d_depth_to_3d_point_cloud(&calibration, trans_depth_image, point2_row, point2_column);
+            // float point2_row = (height / 2) * 3.8 / 8.9;
+            // float point2_column = (width / 2) * 8.6 / 15.95;
+            // convert_2d_depth_to_3d_point_cloud(&calibration, trans_depth_image, point2_row, point2_column);
+
+            float point1_row = 0;
+            float point1_column = 0;
+            float point2_row = 0;
+            float point2_column = 0;
+
+            namedWindow("foobar", WINDOW_AUTOSIZE);
+            // Mat measure_img = color_image.clone();
+            ClickData* click_data = new ClickData();
+            //set the callback function for any mouse event
+            setMouseCallback("foobar", CallBackFunc, click_data);
+            do{
+                Mat measure_img = color_image.clone();
+                if (click_data->n_clicks>0){
+                    line (measure_img, Point(click_data->x1, click_data->y1), Point(click_data->x, click_data->y), Scalar(0,0,0), LINE_4);
+
+                    Point3D p1 = convert_2d_depth_to_3d_point_cloud(&calibration, trans_depth_image, click_data->x1, click_data->y1);
+                    Point3D p2 = convert_2d_depth_to_3d_point_cloud(&calibration, trans_depth_image, click_data->x, click_data->y);
+
+                    cout<<"The distance is "<< p1.get_distance(p2) << endl;
+
+                }
+                imshow("foobar", measure_img);
+            }while (waitKey(10)!=27);
 
             float point3_row = (height / 2) * 4.8 / 8.9;
             float point3_column = (width / 2) * 10.6 / 15.95;
