@@ -162,6 +162,8 @@ static Point3D convert_2d_depth_to_3d_point_cloud(const k4a_calibration_t* calib
     int coordinate_x_int = static_cast<int>(coordinate_x);
     int coordinate_y_int = static_cast<int>(coordinate_y);
     depth = average_window_filter(trans_depth_image, coordinate_x_int, coordinate_y_int, height, width);
+    // depth = (trans_depth_image.at<cv::int16_t>(coordinate_x_int,coordinate_y_int));
+
 
     k4a_float3_t ray;
     k4a_float2_t point_2d;
@@ -212,9 +214,9 @@ int main()
     // Set the configuration of device, you can also set it after open the device but before starting the camera
     k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
     config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;  // <==== For Color image
-    config.color_resolution = K4A_COLOR_RESOLUTION_1080P; //K4A_COLOR_RESOLUTION_2160P;
+    config.color_resolution = K4A_COLOR_RESOLUTION_2160P; //K4A_COLOR_RESOLUTION_2160P; 720, 1080, 
     config.depth_mode = K4A_DEPTH_MODE_NFOV_UNBINNED;  // <==== For Depth image
-    config.camera_fps = K4A_FRAMES_PER_SECOND_30;
+    config.camera_fps = K4A_FRAMES_PER_SECOND_15;
     config.synchronized_images_only = true;
 
     // Open the device
@@ -257,30 +259,6 @@ int main()
             goto Exit;
         }
 
-        // Probe for a color image
-        k4a_image_t image_color = k4a_capture_get_color_image(capture);
-        if (image_color != NULL)
-        {
-            // Get the sizes of color image
-            int width = k4a_image_get_width_pixels(image_color);
-            int height = k4a_image_get_height_pixels(image_color);
-            int strides = k4a_image_get_stride_bytes(image_color);
-            printf("Color image height, width and strides: %d, %d, %d\n", height, width, strides);
-
-            // Store the image using opencv Mat
-            uint8_t* color_image_data = k4a_image_get_buffer(image_color);
-            color_image = Mat(height, width, CV_8UC4, (void*)color_image_data, Mat::AUTO_STEP);
-
-            // Display the images
-            // namedWindow("foobar", WINDOW_AUTOSIZE);
-            // imshow("foobar", color_image);
-            // waitKey(1000);
-        }
-        else
-        {
-            printf(" | Color None                       ");
-        }
-
         // Probe for a depth16 image
         const k4a_image_t image_depth = k4a_capture_get_depth_image(capture);
         if (image_depth != NULL)
@@ -296,15 +274,40 @@ int main()
             const Mat depth_image(height, width, CV_16U, (void*)depth_image_data, Mat::AUTO_STEP);
 
             // Display the images
-            // namedWindow("foobar", WINDOW_AUTOSIZE);
-            // imshow("foobar", depth_image);
-            // waitKey(2000);
+            namedWindow("foobar", WINDOW_AUTOSIZE);
+            imshow("foobar", depth_image);
+            waitKey(1000);
         }
         else
         {
             printf(" | Depth16 None\n");
         }
 
+        // Probe for a color image
+        k4a_image_t image_color = k4a_capture_get_color_image(capture);
+        if (image_color != NULL)
+        {
+            // Get the sizes of color image
+            int width = k4a_image_get_width_pixels(image_color);
+            int height = k4a_image_get_height_pixels(image_color);
+            int strides = k4a_image_get_stride_bytes(image_color);
+            printf("Color image height, width and strides: %d, %d, %d\n", height, width, strides);
+
+            // Store the image using opencv Mat
+            uint8_t* color_image_data = k4a_image_get_buffer(image_color);
+            color_image = Mat(height, width, CV_8UC4, (void*)color_image_data, Mat::AUTO_STEP);
+
+            // Display the images
+            namedWindow("foobar", WINDOW_AUTOSIZE);
+            imshow("foobar", color_image);
+            waitKey(1000);
+        }
+        else
+        {
+            printf(" | Color None                       ");
+        }
+
+        
         // 9.2  derive the depth value in the color camera geometry using the function k4a_transformation_depth_image_to_color_camera().
         k4a_transformation_t transformation = NULL;
         k4a_image_t transformed_depth_image = NULL;
@@ -330,11 +333,36 @@ int main()
             // Store the image using opencv Mat
             uint16_t* transformed_depth_image_data = (uint16_t*)(void*)k4a_image_get_buffer(transformed_depth_image);
             const Mat trans_depth_image(height, width, CV_16U, (void*)transformed_depth_image_data, Mat::AUTO_STEP);
-
+            Mat valid_color_img = color_image.clone();
+            // cout << "The height and width are : " << height << width <<endl;
+            // // exit(0);
+            // cout << "Matrix type " << valid_color_img.type();
+            // cout << " Matrix Size " << valid_color_img.rows << "x" << valid_color_img.cols << endl;
+            // for (int i=0; i<height; i++){
+            //     for (int j=0; j<width; j++){
+            //         // valid_color_img.at<Vec3b>(Point(j, i))[0] = 100;
+            //         // valid_color_img.at<Vec3b>(Point(j, i))[1] = 100;
+            //         // valid_color_img.at<Vec3b>(Point(j, i))[2] = 100;
+            //         // cout << "Here " <<  i << " " << j <<endl;
+            //         if (trans_depth_image.at<cv::int16_t>(i, j) == 0){
+            //             // cout <<" The depth pixel value at " <<i <<" and " << j << " is " << val << endl;
+            //             // cout << "Replacing pixel" << endl;
+            //             valid_color_img.at<Vec3b>(i, j)[0] = 0;
+            //             valid_color_img.at<Vec3b>(i, j)[1] = 0;
+            //             valid_color_img.at<Vec3b>(i, j)[2] = 0;
+            //         }else{
+            //             valid_color_img.at<Vec3b>(i, j)[0] = 100;
+            //             valid_color_img.at<Vec3b>(i, j)[1] = 100;
+            //             valid_color_img.at<Vec3b>(i, j)[2] = 100;
+            //             // valid_color_img.at<Vec3b>(Point(j, i))[1] = color_image.at<Vec3b>(Point(j, i))[1];
+            //             // valid_color_img.at<Vec3b>(Point(j, i))[2] = color_image.at<Vec3b>(Point(j, i))[2];
+            //         }
+            //     }
+            // }
             // Display the transformed depth images
             namedWindow("foobar", WINDOW_AUTOSIZE);
             imshow("foobar", trans_depth_image);
-            waitKey(2000);
+            waitKey(1000);
 
             // Find the point xy coordinate from color image, this pair of points belongs to the short edge of the shelf
             // float point1_row = (height / 2) * 3.7 / 8.9;
@@ -355,8 +383,9 @@ int main()
             ClickData* click_data = new ClickData();
             //set the callback function for any mouse event
             setMouseCallback("foobar", CallBackFunc, click_data);
+            uint pressed_char;
             do{
-                Mat measure_img = color_image.clone();
+                Mat measure_img = valid_color_img.clone();
                 if (click_data->n_clicks>0){
                     line (measure_img, Point(click_data->x1, click_data->y1), Point(click_data->x, click_data->y), Scalar(0,0,0), LINE_4);
 
@@ -367,15 +396,19 @@ int main()
 
                 }
                 imshow("foobar", measure_img);
-            }while (waitKey(10)!=27);
+                pressed_char = waitKey(10);
+                if (pressed_char == 32){
+                    click_data->n_clicks = 0;
+                }
+            }while (pressed_char!=27);
 
-            float point3_row = (height / 2) * 4.8 / 8.9;
-            float point3_column = (width / 2) * 10.6 / 15.95;
-            convert_2d_depth_to_3d_point_cloud(&calibration, trans_depth_image, point3_row, point3_column);
+            // float point3_row = (height / 2) * 4.8 / 8.9;
+            // float point3_column = (width / 2) * 10.6 / 15.95;
+            // convert_2d_depth_to_3d_point_cloud(&calibration, trans_depth_image, point3_row, point3_column);
 
-            float point4_row = (height / 2) * 5.1 / 8.9;
-            float point4_column = (width / 2) * 24.85 / 15.95;
-            convert_2d_depth_to_3d_point_cloud(&calibration, trans_depth_image, point4_row, point4_column);
+            // float point4_row = (height / 2) * 5.1 / 8.9;
+            // float point4_column = (width / 2) * 24.85 / 15.95;
+            // convert_2d_depth_to_3d_point_cloud(&calibration, trans_depth_image, point4_row, point4_column);
         }
 
         // release images
